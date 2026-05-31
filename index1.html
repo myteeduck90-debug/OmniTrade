@@ -1,0 +1,2038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OmniTrade — Cross-Sport Fantasy Calculator</title>
+<meta name="description" content="The only fantasy trade calculator that spans MLB, NFL, and NBA — with dynasty values across all sports.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   OMNITRADE — DESIGN TOKENS
+   To change colors/fonts, edit values here. Everything below
+   references these variables — you won't need to hunt the file.
+   ============================================================ */
+:root {
+  /* Background layers (darkest to lightest) */
+  --bg:        #080b12;
+  --surface:   #0e1420;
+  --surface2:  #151d2e;
+  --surface3:  #1c2538;
+  --border:    #1e2d47;
+  --border2:   #2a3d5a;
+
+  /* Text */
+  --text:      #e2e8f4;
+  --text2:     #7a8fa8;
+  --text3:     #3d5068;
+
+  /* Sport identity colors — edit these to rebrand each sport */
+  --mlb:       #c8102e;   /* MLB red */
+  --mlb-soft:  rgba(200,16,46,0.15);
+  --nfl:       #1a7a4a;   /* NFL green */
+  --nfl-soft:  rgba(26,122,74,0.15);
+  --nba:       #f4681a;   /* NBA orange */
+  --nba-soft:  rgba(244,104,26,0.15);
+  --multi:     #4a90d9;   /* Multi-sport blue */
+  --multi-soft:rgba(74,144,217,0.15);
+
+  /* UI accents */
+  --gold:      #f5c842;
+  --gold-soft: rgba(245,200,66,0.15);
+  --win:       #22c55e;
+  --lose:      #ef4444;
+
+  /* Fonts */
+  --font-display: 'Russo One', sans-serif;
+  --font-body:    'Inter', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+
+  /* Spacing & shape */
+  --radius:    10px;
+  --radius-sm: 6px;
+}
+
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.5;
+}
+
+/* Subtle noise grain overlay — gives depth without being distracting */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ============================================================
+   SCROLLBAR — matches dark theme
+   ============================================================ */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+header {
+  position: sticky; top: 0; z-index: 200;
+  background: rgba(8,11,18,0.95);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  height: 58px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  letter-spacing: 1px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+/* The gradient slash between OMNI and TRADE */
+.logo-omni { color: var(--text); }
+.logo-trade { color: var(--multi); }
+
+.logo-beta {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: var(--multi);
+  border: 1px solid var(--multi);
+  padding: 2px 6px;
+  border-radius: 3px;
+  opacity: 0.8;
+  align-self: center;
+  margin-top: 2px;
+}
+
+/* API status pill — top right of header */
+.api-status {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text2);
+}
+
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--win);
+  animation: pulse-dot 2.5s infinite;
+}
+.status-dot.loading { background: var(--gold); }
+.status-dot.error   { background: var(--lose); animation: none; }
+
+@keyframes pulse-dot {
+  0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+  50%      { opacity: 0.6; box-shadow: 0 0 0 4px rgba(34,197,94,0); }
+}
+
+.sync-btn {
+  background: none;
+  border: 1px solid var(--border2);
+  color: var(--text2);
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+}
+.sync-btn:hover { border-color: var(--multi); color: var(--multi); }
+
+/* ============================================================
+   SPORT TABS
+   These are the main sport-switching tabs at the top.
+   Order: Multi-Sport | NFL | MLB | NBA | Add Player
+   ============================================================ */
+.sport-tabs {
+  display: flex;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 0;
+}
+.sport-tabs::-webkit-scrollbar { display: none; }
+
+.sport-tab {
+  display: flex; align-items: center; gap: 7px;
+  padding: 14px 20px;
+  border: none; background: none;
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: var(--text3);
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  position: relative; bottom: -1px;
+}
+
+/* Color each tab by sport when active */
+.sport-tab[data-sport="multi"].active { color: var(--multi); border-color: var(--multi); background: rgba(74,144,217,0.06); }
+.sport-tab[data-sport="nfl"].active   { color: var(--nfl);   border-color: var(--nfl);   background: rgba(26,122,74,0.06); }
+.sport-tab[data-sport="mlb"].active   { color: var(--mlb);   border-color: var(--mlb);   background: rgba(200,16,46,0.06); }
+.sport-tab[data-sport="nba"].active   { color: var(--nba);   border-color: var(--nba);   background: rgba(244,104,26,0.06); }
+.sport-tab[data-sport="add"].active   { color: var(--gold);  border-color: var(--gold);  background: rgba(245,200,66,0.06); }
+
+.sport-tab:not(.active):hover { color: var(--text2); }
+
+/* Small colored dot indicator on each tab */
+.tab-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+.sport-tab.active .tab-dot { opacity: 1; }
+.sport-tab[data-sport="multi"] .tab-dot { background: var(--multi); }
+.sport-tab[data-sport="nfl"]   .tab-dot { background: var(--nfl); }
+.sport-tab[data-sport="mlb"]   .tab-dot { background: var(--mlb); }
+.sport-tab[data-sport="nba"]   .tab-dot { background: var(--nba); }
+.sport-tab[data-sport="add"]   .tab-dot { background: var(--gold); }
+
+/* Player count badge on each tab */
+.tab-count {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--surface3);
+  color: var(--text3);
+}
+.sport-tab.active .tab-count { background: var(--surface2); color: var(--text2); }
+
+/* ============================================================
+   MAIN CONTENT AREA
+   ============================================================ */
+main {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* Each sport's content is a "page" — only the active one shows */
+.sport-page { display: none; }
+.sport-page.active { display: block; }
+
+/* Page title row */
+.page-title-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap; gap: 10px;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: 1px;
+  color: var(--text2);
+}
+
+.mode-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text3);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+}
+
+/* ============================================================
+   TRADE CALCULATOR — Main 3-column layout
+   Left: Team A | Center: Controls | Right: Team B
+   ============================================================ */
+.trade-arena {
+  display: grid;
+  grid-template-columns: 1fr 170px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+/* ---- Trade Side Panel (shared by Team A and Team B) ---- */
+.trade-side {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: visible; /* Must be visible for dropdown to escape bounds */
+}
+
+.trade-side-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.team-label {
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: 1px;
+}
+
+.team-total {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ---- Search Box ---- */
+.search-area {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  position: relative; /* Anchor point for the dropdown */
+}
+
+.search-input {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.search-input:focus { border-color: var(--multi); background: var(--surface3); }
+.search-input::placeholder { color: var(--text3); }
+
+/* ---- Search Dropdown ---- */
+.search-dropdown {
+  position: absolute;
+  top: 100%; /* Anchors directly below the search area */
+  left: 12px; right: 12px;
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 500; /* High enough to float above everything */
+  box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+  display: none;
+}
+.search-dropdown.open { display: block; }
+
+.dd-section-label {
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text3);
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.dd-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 12px;
+  cursor: pointer;
+  transition: background 0.12s;
+  gap: 8px;
+}
+.dd-item:hover { background: var(--border); }
+
+.dd-item-left { flex: 1; min-width: 0; }
+.dd-item-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd-item-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text2);
+  margin-top: 2px;
+  display: flex; gap: 5px; align-items: center;
+}
+.dd-item-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.dd-no-results {
+  padding: 14px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+  text-align: center;
+}
+
+/* ---- Sport Chips — colored labels like [NFL] [MLB] [NBA] ---- */
+.chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+/* Edit these background/color values to change chip appearance */
+.chip-nfl   { background: var(--nfl-soft);   color: var(--nfl); }
+.chip-mlb   { background: var(--mlb-soft);   color: var(--mlb); }
+.chip-nba   { background: var(--nba-soft);   color: var(--nba); }
+.chip-multi { background: var(--multi-soft); color: var(--multi); }
+.chip-pick  { background: var(--gold-soft);  color: var(--gold); }
+
+/* ---- Player Cards inside the trade panel ---- */
+.players-list {
+  padding: 10px;
+  min-height: 140px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+
+.empty-msg {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+  padding: 30px;
+  text-align: center;
+  min-height: 120px;
+}
+
+.player-card {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  gap: 8px;
+  animation: card-in 0.18s ease;
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(-5px); }
+  to   { opacity: 1; transform: none; }
+}
+.player-card:hover { border-color: var(--border2); }
+
+/* Left border accent matches the sport color */
+.player-card[data-sport="nfl"] { border-left: 3px solid var(--nfl); }
+.player-card[data-sport="mlb"] { border-left: 3px solid var(--mlb); }
+.player-card[data-sport="nba"] { border-left: 3px solid var(--nba); }
+.player-card[data-sport="pick"]{ border-left: 3px solid var(--gold); }
+
+.pc-info { flex: 1; min-width: 0; }
+.pc-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text2);
+  margin-top: 3px;
+  display: flex; gap: 5px; align-items: center;
+}
+.pc-val {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.pc-remove {
+  background: none; border: none;
+  color: var(--text3);
+  cursor: pointer; font-size: 14px;
+  padding: 3px 5px; border-radius: 4px;
+  transition: all 0.15s; line-height: 1;
+  flex-shrink: 0;
+}
+.pc-remove:hover { color: var(--lose); background: rgba(239,68,68,0.1); }
+
+/* ---- Center Controls Column ---- */
+.trade-controls {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 10px;
+  padding: 16px 8px;
+  position: sticky; top: 80px; /* Stays visible while scrolling */
+}
+
+.vs-symbol {
+  font-family: var(--font-display);
+  font-size: 42px;
+  color: var(--border2);
+  line-height: 1;
+  user-select: none;
+}
+
+.analyze-btn {
+  width: 100%;
+  background: var(--multi);
+  border: none; color: #fff;
+  padding: 12px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 17px;
+  letter-spacing: 1.5px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 20px rgba(74,144,217,0.3);
+}
+.analyze-btn:hover { background: #5a9de8; transform: translateY(-2px); box-shadow: 0 8px 28px rgba(74,144,217,0.45); }
+.analyze-btn:active { transform: none; }
+
+.ctrl-btn {
+  width: 100%;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text2);
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  transition: all 0.15s;
+}
+.ctrl-btn:hover { border-color: var(--text2); color: var(--text); }
+.ctrl-btn.danger:hover { border-color: var(--lose); color: var(--lose); }
+
+/* ============================================================
+   VERDICT PANEL — shows after clicking Analyze
+   ============================================================ */
+.verdict-panel {
+  margin-top: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: none;
+  animation: verdict-in 0.3s ease;
+}
+.verdict-panel.visible { display: block; }
+
+@keyframes verdict-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.verdict-top {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap; gap: 12px;
+}
+
+.verdict-label {
+  font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text3); margin-bottom: 5px;
+}
+
+.verdict-headline {
+  font-family: var(--font-display);
+  font-size: 28px; letter-spacing: 1px; line-height: 1;
+}
+
+.verdict-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.action-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: 0.3px;
+  transition: all 0.15s;
+}
+.action-btn:hover { border-color: var(--multi); color: var(--multi); }
+.action-btn.copied { border-color: var(--win); color: var(--win); }
+
+.verdict-scores {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 1px; background: var(--border);
+}
+
+.verdict-score-block {
+  background: var(--surface);
+  padding: 16px 20px;
+}
+
+.vsb-label {
+  font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--text2); margin-bottom: 5px;
+}
+.vsb-value {
+  font-family: var(--font-display);
+  font-size: 44px; line-height: 1;
+}
+.vsb-diff {
+  font-family: var(--font-mono);
+  font-size: 11px; margin-top: 5px;
+}
+
+/* The split bar showing A vs B value ratio */
+.verdict-bar-wrap { padding: 0 20px; background: var(--surface); border-top: 1px solid var(--border); }
+.verdict-bar-labels {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono); font-size: 9px; color: var(--text3);
+  padding: 8px 0 5px;
+}
+.verdict-bar-track {
+  height: 5px; background: var(--surface3); border-radius: 3px;
+  overflow: hidden; margin-bottom: 12px;
+}
+.verdict-bar-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--multi), var(--gold));
+  transition: width 0.9s cubic-bezier(.34,1.56,.64,1);
+}
+
+/* Breakdown table of individual player values */
+.verdict-breakdown { padding: 16px 20px; border-top: 1px solid var(--border); }
+.breakdown-header {
+  font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text3); margin-bottom: 12px;
+}
+.breakdown-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 8px; font-size: 13px;
+}
+.breakdown-row:last-child { border-bottom: none; }
+.br-name { font-weight: 500; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.br-side {
+  font-family: var(--font-mono); font-size: 9px; padding: 2px 5px; border-radius: 3px;
+}
+.br-side-a { background: var(--multi-soft); color: var(--multi); }
+.br-side-b { background: var(--gold-soft);  color: var(--gold); }
+.br-val { font-family: var(--font-mono); font-size: 12px; color: var(--gold); }
+
+/* ============================================================
+   SAVED TRADES SECTION
+   ============================================================ */
+.saved-section {
+  margin-top: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.saved-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.saved-title {
+  font-family: var(--font-display);
+  font-size: 16px; letter-spacing: 1px; color: var(--text2);
+}
+
+.saved-count {
+  font-family: var(--font-mono);
+  font-size: 10px; color: var(--text3);
+}
+
+.saved-list { padding: 10px; display: flex; flex-direction: column; gap: 7px; }
+
+.saved-item {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px; gap: 10px;
+}
+.si-info { flex: 1; min-width: 0; }
+.si-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.si-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text2); margin-top: 2px; }
+.si-actions { display: flex; gap: 5px; flex-shrink: 0; }
+
+.mini-btn {
+  background: none; border: 1px solid var(--border);
+  color: var(--text2); padding: 4px 8px; border-radius: 4px;
+  cursor: pointer; font-family: var(--font-mono); font-size: 9px;
+  transition: all 0.15s;
+}
+.mini-btn:hover { border-color: var(--multi); color: var(--multi); }
+.mini-btn.del:hover { border-color: var(--lose); color: var(--lose); }
+
+.saved-empty {
+  padding: 20px; text-align: center;
+  font-family: var(--font-mono); font-size: 11px; color: var(--text3);
+}
+
+/* ============================================================
+   RANKINGS VIEW — Tables of top players by sport
+   ============================================================ */
+.rankings-wrap {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 18px;
+}
+
+.rankings-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.rc-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rc-sport-name {
+  font-family: var(--font-display);
+  font-size: 17px; letter-spacing: 1px;
+}
+
+.rc-count {
+  font-family: var(--font-mono);
+  font-size: 10px; color: var(--text3); margin-left: auto;
+}
+
+/* Rankings table */
+.r-table { width: 100%; border-collapse: collapse; }
+.r-table thead { background: var(--surface2); }
+.r-table th {
+  padding: 8px 14px;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--text3); border-bottom: 1px solid var(--border);
+}
+.r-table th:last-child { text-align: right; }
+.r-table td { padding: 9px 14px; border-bottom: 1px solid rgba(30,45,71,0.6); font-size: 12px; }
+.r-table tr:last-child td { border-bottom: none; }
+.r-table tbody tr:hover td { background: var(--surface2); }
+
+.r-rank { font-family: var(--font-mono); font-size: 11px; color: var(--text3); }
+.r-name { font-weight: 500; }
+.r-team { font-family: var(--font-mono); font-size: 10px; color: var(--text2); }
+.r-age  { font-family: var(--font-mono); font-size: 10px; color: var(--text2); }
+
+.tier {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+  padding: 2px 6px; border-radius: 3px;
+}
+/* Tier colors — edit these to change ranking badge appearance */
+.tier-elite { background: rgba(245,200,66,0.15); color: var(--gold); }
+.tier-1     { background: var(--multi-soft);      color: var(--multi); }
+.tier-2     { background: var(--nfl-soft);         color: var(--nfl); }
+.tier-3     { background: rgba(61,80,104,0.3);     color: var(--text3); }
+
+.val-wrap { display: flex; align-items: center; gap: 7px; justify-content: flex-end; }
+.val-bar  { width: 48px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.val-bar-f{ height: 100%; border-radius: 2px; background: var(--gold); opacity: 0.6; }
+.val-num  { font-family: var(--font-mono); font-size: 12px; color: var(--gold); min-width: 40px; text-align: right; }
+
+/* ============================================================
+   ADD PLAYER PAGE — Under Construction
+   ============================================================ */
+.construction-page {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 400px; text-align: center; gap: 16px;
+  padding: 40px 20px;
+}
+
+.construction-icon {
+  font-size: 64px; line-height: 1;
+  animation: wobble 3s ease-in-out infinite;
+}
+@keyframes wobble {
+  0%,100% { transform: rotate(-5deg); }
+  50%      { transform: rotate(5deg); }
+}
+
+.construction-title {
+  font-family: var(--font-display);
+  font-size: 28px; letter-spacing: 2px; color: var(--gold);
+}
+
+.construction-sub {
+  font-family: var(--font-mono);
+  font-size: 12px; color: var(--text2); line-height: 1.8; max-width: 460px;
+}
+
+.construction-badges {
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 8px;
+}
+
+.c-badge {
+  font-family: var(--font-mono);
+  font-size: 10px; padding: 5px 12px;
+  border-radius: 20px; border: 1px solid;
+  letter-spacing: 0.5px;
+}
+.c-badge.planned { border-color: var(--multi); color: var(--multi); }
+.c-badge.coming  { border-color: var(--gold);  color: var(--gold); }
+.c-badge.review  { border-color: var(--nfl);   color: var(--nfl); }
+
+/* ============================================================
+   SAVE MODAL
+   ============================================================ */
+.modal-bg {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(8px);
+  z-index: 600;
+  display: none; align-items: center; justify-content: center;
+}
+.modal-bg.open { display: flex; }
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 22px;
+  width: 100%; max-width: 380px;
+  animation: modal-in 0.2s ease;
+}
+@keyframes modal-in { from{opacity:0;transform:scale(.95)} to{opacity:1;transform:none} }
+
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 22px; letter-spacing: 1px; margin-bottom: 14px;
+}
+
+.modal-input {
+  width: 100%;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 9px 12px;
+  color: var(--text); font-family: var(--font-body); font-size: 14px;
+  outline: none; margin-bottom: 14px;
+}
+.modal-input:focus { border-color: var(--multi); }
+
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.modal-btn {
+  background: var(--multi); border: none; color: #fff;
+  padding: 8px 18px; border-radius: var(--radius-sm);
+  cursor: pointer; font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 0.5px; transition: all 0.15s;
+}
+.modal-btn:hover { background: #5a9de8; }
+.modal-btn.cancel { background: none; border: 1px solid var(--border); color: var(--text2); }
+.modal-btn.cancel:hover { border-color: var(--text2); color: var(--text); }
+
+/* ============================================================
+   TOAST NOTIFICATION
+   ============================================================ */
+.toast {
+  position: fixed; bottom: 20px; right: 20px;
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  font-family: var(--font-mono); font-size: 11px;
+  z-index: 9000;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  transform: translateY(60px); opacity: 0;
+  transition: all 0.25s ease; max-width: 300px;
+}
+.toast.show { transform: none; opacity: 1; }
+.toast.ok  { border-color: var(--win);  color: var(--win); }
+.toast.err { border-color: var(--lose); color: var(--lose); }
+
+/* ============================================================
+   RESPONSIVE — Stacks to single column on phones/tablets
+   ============================================================ */
+@media (max-width: 860px) {
+  .trade-arena { grid-template-columns: 1fr; }
+  .trade-controls { position: static; flex-direction: row; flex-wrap: wrap; padding: 10px 0; }
+  .vs-symbol { display: none; }
+  .analyze-btn { flex: 1; min-width: 120px; }
+  .ctrl-btn { flex: 1; }
+  main { padding: 14px; }
+  header { padding: 0 14px; }
+  .sport-tabs { padding: 0 14px; }
+  .rankings-wrap { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .verdict-scores { grid-template-columns: 1fr; }
+  .logo-beta { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+<header>
+  <div class="logo">
+    <span class="logo-omni">OMNI</span><span class="logo-trade">TRADE</span>
+    <span class="logo-beta">BETA</span>
+  </div>
+
+  <div class="api-status">
+    <div class="status-dot loading" id="status-dot"></div>
+    <span id="status-text">Initializing...</span>
+    <button class="sync-btn" onclick="syncRosters()">↻ Sync</button>
+  </div>
+</header>
+
+<!-- ============================================================
+     SPORT TABS
+     Tab order: Multi-Sport | NFL | MLB | NBA | Add Player
+     To reorder tabs: move the button elements below
+     ============================================================ -->
+<div class="sport-tabs" id="sport-tabs">
+
+  <button class="sport-tab active" data-sport="multi" onclick="setTab('multi')">
+    <span class="tab-dot"></span>
+    MULTI-SPORT
+    <span class="tab-count" id="cnt-multi">—</span>
+  </button>
+
+  <button class="sport-tab" data-sport="nfl" onclick="setTab('nfl')">
+    <span class="tab-dot"></span>
+    NFL
+    <span class="tab-count" id="cnt-nfl">—</span>
+  </button>
+
+  <button class="sport-tab" data-sport="mlb" onclick="setTab('mlb')">
+    <span class="tab-dot"></span>
+    MLB
+    <span class="tab-count" id="cnt-mlb">—</span>
+  </button>
+
+  <button class="sport-tab" data-sport="nba" onclick="setTab('nba')">
+    <span class="tab-dot"></span>
+    NBA
+    <span class="tab-count" id="cnt-nba">—</span>
+  </button>
+
+  <button class="sport-tab" data-sport="add" onclick="setTab('add')">
+    <span class="tab-dot"></span>
+    ➕ ADD PLAYER
+  </button>
+
+</div>
+
+<!-- ============================================================
+     MAIN CONTENT
+     ============================================================ -->
+<main>
+
+  <!-- ── MULTI-SPORT PAGE ── -->
+  <div class="sport-page active" id="page-multi">
+    <div class="page-title-row">
+      <span class="page-title">TRADE CALCULATOR</span>
+      <span class="mode-badge" style="color:var(--multi); border-color:var(--multi)">⚡ MULTI-SPORT MODE — All Assets</span>
+    </div>
+    <div class="trade-arena">
+      <div class="trade-side">
+        <div class="trade-side-header">
+          <span class="team-label" style="color:var(--multi)">Team A Receives</span>
+          <span class="team-total" id="total-multi-a">0</span>
+        </div>
+        <div class="search-area">
+          <input class="search-input" id="srch-multi-a" type="text" placeholder="Search any player or pick…"
+            autocomplete="off" oninput="doSearch('multi','a')" onfocus="openDD('multi','a')" onblur="delayClose('multi','a')">
+          <div class="search-dropdown" id="dd-multi-a"></div>
+        </div>
+        <div class="players-list" id="list-multi-a">
+          <div class="empty-msg">Search players from any sport</div>
+        </div>
+      </div>
+      <div class="trade-controls">
+        <div class="vs-symbol">⇄</div>
+        <button class="analyze-btn" onclick="analyze('multi')">ANALYZE TRADE</button>
+        <button class="ctrl-btn" onclick="openSave('multi')">💾 Save</button>
+        <button class="ctrl-btn danger" onclick="clearTrade('multi')">✕ Clear</button>
+      </div>
+      <div class="trade-side">
+        <div class="trade-side-header">
+          <span class="team-label" style="color:var(--gold)">Team B Receives</span>
+          <span class="team-total" id="total-multi-b">0</span>
+        </div>
+        <div class="search-area">
+          <input class="search-input" id="srch-multi-b" type="text" placeholder="Search any player or pick…"
+            autocomplete="off" oninput="doSearch('multi','b')" onfocus="openDD('multi','b')" onblur="delayClose('multi','b')">
+          <div class="search-dropdown" id="dd-multi-b"></div>
+        </div>
+        <div class="players-list" id="list-multi-b">
+          <div class="empty-msg">Search players from any sport</div>
+        </div>
+      </div>
+    </div>
+    <div class="verdict-panel" id="verdict-multi"></div>
+    <div class="saved-section">
+      <div class="saved-header">
+        <span class="saved-title">SAVED TRADES</span>
+        <span class="saved-count" id="saved-multi-count">0 saved</span>
+      </div>
+      <div class="saved-list" id="saved-multi-list">
+        <div class="saved-empty">No saved trades yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── NFL PAGE ── -->
+  <div class="sport-page" id="page-nfl">
+    <div class="page-title-row">
+      <span class="page-title">NFL TRADE CALCULATOR</span>
+      <span class="mode-badge" style="color:var(--nfl); border-color:var(--nfl)">🏈 NFL ONLY — Picks Included</span>
+    </div>
+    <div class="trade-arena">
+      <div class="trade-side">
+        <div class="trade-side-header">
+          <span class="team-label" style="color:var(--nfl)">Team A Receives</span>
+          <span class="team-total" id="total-nfl-a">0</span>
+        </div>
+        <div class="search-area">
+          <input class="search-input" id="srch-nfl-a" type="text" placeholder="Search NFL player or pick…"
+            autocomplete="off" oninput="doSearch('nfl','a')" onfocus="openDD('nfl','a')" onblur="delayClose('nfl','a')">
+          <div class="search-dropdown" id="dd-nfl-a"></div>
+        </div>
+        <div class="players-list" id="list-nfl-a">
+          <div class="empty-msg">Search NFL players &amp; picks</div>
+        </div>
+      </div>
+      <div class="trade-controls">
+        <div class="vs-symbol">⇄</div>
+        <button class="analyze-btn" style="background:var(--nfl);box-shadow:0 4px 20px rgba(26,122,74,0.3);" onclick="analyze('nfl')">ANALYZE TRADE</button>
+        <button class="ctrl-btn" onclick="openSave('nfl')">💾 Save</button>
+        <button class="ctrl-btn danger" onclick="clearTrade('nfl')">✕ Clear</button>
+      </div>
+      <div class="trade-side">
+        <div class="trade-side-header">
+          <span class="team-label" style="color:var(--gold)">Team B Receives</span>
+          <span class="team-total" id="total-nfl-b">0</span>
+        </div>
+        <div class="search-area">
+          <input class="search-input" id="srch-nfl-b" type="text" placeholder="Search NFL player or pick…"
+            autocomplete="off" oninput="doSearch('nfl','b')" onfocus="openDD('nfl','b')" onblur="delayClose('nfl','b')">
+          <div class="search-dropdown" id="dd-nfl-b"></div>
+        </div>
+        <div class="players-list" id="list-nfl-b">
+          <div class="empty-msg">Search NFL players &amp; picks</div>
+        </div>
+      </div>
+    </div>
+    <div class="verdict-panel" id="verdict-nfl"></div>
+    <div class="saved-section">
+      <div class="saved-header">
+        <span class="saved-title">SAVED NFL TRADES</span>
+        <span class="saved-count" id="saved-nfl-count">0 saved</span>
+      </div>
+      <div class="saved-list" id="saved-nfl-list">
+        <div class="saved-empty">No saved trades yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MLB PAGE ── -->
+  <div class="sport-page" id="page-mlb">
+    <div class="page-title-row">
+      <span class="page-title">MLB TRADE CALCULATOR</span>
+      <span class="mode-badge" style="color:var(--mlb); border-color:var(--mlb)">⚾ MLB ONLY — Majors + Minors</span>
+    </div>
+    <div class="trade-arena">
+      <div class="trade-side">
+        <div class="trade-side-header">
+          <span class="team-label" style="color:var(--mlb)">Team A Receives</span>
+          <span class="team-total" id="total-mlb-a">0</span>
+        </div>
+        <div class="search-area">
+          <input class="search-input" id="srch-mlb-a" type="text" placeholder="Search MLB player or pick…"
+            autocomplete="off" oninput="doSearch('mlb','a')" onfocus="openDD('mlb','a')" onblur="delayClose('mlb','a')">
+          <div class="search-dropdown" id="dd-mlb-a"></div>
+        </div>
+        <div class="players-list" id="list-mlb-a">
+          <div class="empty-msg">Search MLB &amp; MiLB players</div>
+        </div>
+      </div>
+      <div class="trade-controls">
+        <div class="vs-symbol">⇄</div>
+        <button class="analyze-btn" style="background:var(--mlb);box-shadow:0 4px 20px rgba(200,16,46,0.3);" onclick="analyze('mlb')">ANALYZE TRADE</button>
+        <button class="ctrl-btn" onclick="openSave('mlb')">💾 Save</button>
+        <button class="ctrl-btn danger" onclick="clearTrade('mlb')">✕ Clear</button>
+      </div>
+      <div class="trade-side">
+        <div class="trade-side-header">
+          <span class="team-label" style="color:var(--gold)">Team B Receives</span>
+          <span class="team-total" id="total-mlb-b">0</span>
+        </div>
+        <div class="search-area">
+          <input class="search-input" id="srch-mlb-b" type="text" placeholder="Search MLB player or pick…"
+            autocomplete="off" oninput="doSearch('mlb','b')" onfocus="openDD('mlb','b')" onblur="delayClose('mlb','b')">
+          <div class="search-dropdown" id="dd-mlb-b"></div>
+        </div>
+        <div class="players-list" id="list-mlb-b">
+          <div class="empty-msg">Search MLB &amp; MiLB players</div>
+        </div>
+      </div>
+    </div>
+    <div class="verdict-panel" id="verdict-mlb"></div>
+    <div class="saved-section">
+      <div class="saved-header">
+        <span class="saved-title">SAVED MLB TRADES</span>
+        <span class="saved-count" id="saved-mlb-count">0 saved</span>
+      </div>
+      <div class="saved-list" id="saved-mlb-list">
+        <div class="saved-empty">No saved trades yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── NBA PAGE ── -->
+  <div class="sport-page" id="page-nba">
+    <div class="page-title-row">
+      <span class="page-title">NBA TRADE CALCULATOR</span>
+      <span class="mode-badge" style="color:var(--nba); border-color:var(--nba)">🏀 NBA ONLY — Picks Included</span>
+    </div>
+    <div class="trade-arena">
+      <div class="trade-side">
+        <div class="trade-side-header">
+          <span class="team-label" style="color:var(--nba)">Team A Receives</span>
+          <span class="team-total" id="total-nba-a">0</span>
+        </div>
+        <div class="search-area">
+          <input class="search-input" id="srch-nba-a" type="text" placeholder="Search NBA player or pick…"
+            autocomplete="off" oninput="doSearch('nba','a')" onfocus="openDD('nba','a')" onblur="delayClose('nba','a')">
+          <div class="search-dropdown" id="dd-nba-a"></div>
+        </div>
+        <div class="players-list" id="list-nba-a">
+          <div class="empty-msg">Search NBA players &amp; picks</div>
+        </div>
+      </div>
+      <div class="trade-controls">
+        <div class="vs-symbol">⇄</div>
+        <button class="analyze-btn" style="background:var(--nba);box-shadow:0 4px 20px rgba(244,104,26,0.3);" onclick="analyze('nba')">ANALYZE TRADE</button>
+        <button class="ctrl-btn" onclick="openSave('nba')">💾 Save</button>
+        <button class="ctrl-btn danger" onclick="clearTrade('nba')">✕ Clear</button>
+      </div>
+      <div class="trade-side">
+        <div class="trade-side-header">
+          <span class="team-label" style="color:var(--gold)">Team B Receives</span>
+          <span class="team-total" id="total-nba-b">0</span>
+        </div>
+        <div class="search-area">
+          <input class="search-input" id="srch-nba-b" type="text" placeholder="Search NBA player or pick…"
+            autocomplete="off" oninput="doSearch('nba','b')" onfocus="openDD('nba','b')" onblur="delayClose('nba','b')">
+          <div class="search-dropdown" id="dd-nba-b"></div>
+        </div>
+        <div class="players-list" id="list-nba-b">
+          <div class="empty-msg">Search NBA players &amp; picks</div>
+        </div>
+      </div>
+    </div>
+    <div class="verdict-panel" id="verdict-nba"></div>
+    <div class="saved-section">
+      <div class="saved-header">
+        <span class="saved-title">SAVED NBA TRADES</span>
+        <span class="saved-count" id="saved-nba-count">0 saved</span>
+      </div>
+      <div class="saved-list" id="saved-nba-list">
+        <div class="saved-empty">No saved trades yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ADD PLAYER PAGE — Under Construction ── -->
+  <div class="sport-page" id="page-add">
+    <div class="construction-page">
+      <div class="construction-icon">🚧</div>
+      <div class="construction-title">ADD PLAYER</div>
+      <div class="construction-sub">
+        This feature is actively being built.<br>
+        Soon you'll be able to submit any player — pros, minor leaguers,
+        prospects, or high school phenoms — directly to OmniTrade.<br><br>
+        Submissions will go through a verification review before
+        being added to the live database for all users.
+      </div>
+      <div class="construction-badges">
+        <span class="c-badge planned">Submit Form — Planned</span>
+        <span class="c-badge coming">Prospect Database — Coming</span>
+        <span class="c-badge review">Community Review — Planned</span>
+        <span class="c-badge coming">High School Phenoms — Coming</span>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Save Modal -->
+<div class="modal-bg" id="save-modal">
+  <div class="modal">
+    <div class="modal-title">SAVE TRADE</div>
+    <input class="modal-input" id="save-name-input" type="text" placeholder="Trade name (e.g. QB rebuild)" maxlength="60">
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="closeModal()">Cancel</button>
+      <button class="modal-btn" onclick="confirmSave()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- ============================================================
+     JAVASCRIPT
+     Sections marked with === SECTION NAME === for easy navigation
+     ============================================================ -->
+<script>
+'use strict';
+
+// ================================================================
+// === PLAYER VALUE OVERRIDES ===
+// Hand-tuned values for top players. Format: "Player Name": value
+// Value scale: 1000 (depth) to 10000 (generational superstar)
+// To update a value: find the name, change the number, save file.
+// ================================================================
+const VALUE_OVERRIDES = {
+  // --- NFL ---
+  "Patrick Mahomes":      9800, "Josh Allen":           9700,
+  "Lamar Jackson":        9400, "Jayden Daniels":       9000,
+  "Caleb Williams":       9000, "Drake Maye":           8800,
+  "Anthony Richardson":   8000, "Tua Tagovailoa":       7800,
+  "Ja'Marr Chase":        9700, "Justin Jefferson":     9600,
+  "CeeDee Lamb":          9500, "Marvin Harrison Jr.":  8700,
+  "Bijan Robinson":       9100, "De'Von Achane":        8600,
+  "Breece Hall":          8500, "Puka Nacua":           8200,
+  "Jalen Williams":       8400, "Amon-Ra St. Brown":    8300,
+  "Josh Jacobs":          7600, "Travis Kelce":         7900,
+  "Sam LaPorta":          7800, "Rashee Rice":          8000,
+  "Tyreek Hill":          8600, "Stefon Diggs":         7200,
+
+  // --- MLB ---
+  "Shohei Ohtani":        10000,"Bobby Witt Jr.":       9300,
+  "Paul Skenes":          9200, "Aaron Judge":          9400,
+  "Ronald Acuna Jr.":     9100, "Tarik Skubal":         8300,
+  "Juan Soto":            8600, "Gunnar Henderson":     9000,
+  "Yordan Alvarez":       8800, "Elly De La Cruz":      8500,
+  "Fernando Tatis Jr.":   8000, "Corbin Carroll":       7800,
+  "Bryce Harper":         7800, "Jackson Holliday":     7800,
+  "Walker Jenkins":       7400, "Max Clark":            7200,
+  "Ace Bailey":           7000, "Wyatt Langford":       7500,
+
+  // --- NBA ---
+  "Victor Wembanyama":    10000,"Nikola Jokic":         9800,
+  "Shai Gilgeous-Alexander": 9700, "Luka Doncic":      9600,
+  "Anthony Edwards":      9500, "Jayson Tatum":        9400,
+  "Giannis Antetokounmpo":9300, "Cade Cunningham":     8900,
+  "Paolo Banchero":       8800, "Jaylen Brown":        8600,
+  "Ja Morant":            8600, "Tyrese Haliburton":   8500,
+  "Jaren Jackson Jr.":    8500, "Evan Mobley":         8700,
+  "Zion Williamson":      8200, "Franz Wagner":        8400,
+  "Kevin Durant":         8400, "Devin Booker":        8300,
+  "LeBron James":         7500, "Damian Lillard":      7800,
+};
+
+
+// ================================================================
+// === DRAFT PICK VALUES ===
+// Picks for NFL, MLB, and NBA across years.
+// To add a year: copy a year block and change the year number.
+// To change a value: find the pick name and update the number.
+// ================================================================
+function buildPicks() {
+  const picks = [];
+  const year  = new Date().getFullYear();
+
+  // --- NFL Picks (Early / Mid / Late per round, rounds 1-3) ---
+  const nflRounds = [
+    { r:1, early:6800, mid:5600, late:4200 },
+    { r:2, early:2800, mid:2100, late:1600 },
+    { r:3, early:1400, mid:1000, late: 700 },
+  ];
+  for (let y = year; y <= year + 2; y++) {
+    nflRounds.forEach(({ r, early, mid, late }) => {
+      const decay = Math.pow(0.85, y - year); // Future picks worth ~15% less per year
+      ['Early','Mid','Late'].forEach((slot, i) => {
+        const val = Math.round([early,mid,late][i] * decay);
+        picks.push({
+          id: `pick-nfl-${y}-${r}-${slot}`,
+          name: `NFL ${y} ${slot} ${r}${ordinal(r)} Rd Pick`,
+          sport: 'nfl', pos: `Rd ${r}`, team: slot.toUpperCase(),
+          age: 'PICK', value: val,
+        });
+      });
+    });
+  }
+
+  // --- MLB Picks (rounds 1-4) ---
+  const mlbRounds = [
+    { r:1, val:7200 }, { r:2, val:3800 }, { r:3, val:2200 }, { r:4, val:1200 },
+  ];
+  for (let y = year; y <= year + 2; y++) {
+    mlbRounds.forEach(({ r, val }) => {
+      const decay = Math.pow(0.85, y - year);
+      picks.push({
+        id: `pick-mlb-${y}-${r}`,
+        name: `MLB ${y} ${r}${ordinal(r)} Round Pick`,
+        sport: 'mlb', pos: `Rd ${r}`, team: 'DRAFT',
+        age: 'PICK', value: Math.round(val * decay),
+      });
+    });
+  }
+
+  // --- NBA Picks (Lottery / Mid / Late, rounds 1-2) ---
+  const nbaRounds = [
+    { r:1, lottery:8000, mid:5200, late:3600 },
+    { r:2, val:1200 },
+  ];
+  for (let y = year; y <= year + 2; y++) {
+    const decay = Math.pow(0.85, y - year);
+    picks.push(
+      { id:`pick-nba-${y}-1-lottery`, name:`NBA ${y} Lottery Pick`, sport:'nba', pos:'Rd 1', team:'LOTTERY', age:'PICK', value: Math.round(nbaRounds[0].lottery * decay) },
+      { id:`pick-nba-${y}-1-mid`,     name:`NBA ${y} Mid 1st Pick`,  sport:'nba', pos:'Rd 1', team:'MID',     age:'PICK', value: Math.round(nbaRounds[0].mid * decay) },
+      { id:`pick-nba-${y}-1-late`,    name:`NBA ${y} Late 1st Pick`, sport:'nba', pos:'Rd 1', team:'LATE',    age:'PICK', value: Math.round(nbaRounds[0].late * decay) },
+      { id:`pick-nba-${y}-2`,         name:`NBA ${y} 2nd Round Pick`,sport:'nba', pos:'Rd 2', team:'DRAFT',   age:'PICK', value: Math.round(nbaRounds[1].val * decay) },
+    );
+  }
+
+  return picks;
+}
+
+function ordinal(n) {
+  return ['th','st','nd','rd'][(n%100-20)%10] || ['th','st','nd','rd'][n%100] || 'th';
+}
+
+
+// ================================================================
+// === VALUE ALGORITHM ===
+// Calculates a value for players NOT in VALUE_OVERRIDES.
+// Factors: position scarcity, age curve, years of experience.
+// ================================================================
+
+// Position scarcity — higher = more valuable in dynasty
+const POS_WEIGHT = {
+  QB:1.0, RB:1.0, WR:1.05, TE:0.85,          // NFL
+  SP:1.0, RP:0.55, C:0.9, '1B':0.75, '2B':0.85,
+  '3B':0.85, SS:1.0, OF:0.9, DH:0.75,         // MLB
+  PG:0.95, SG:0.9, SF:1.0, PF:0.95, G:0.9, F:1.0, // NBA
+};
+
+function calcAge(age, sport) {
+  if (!age || age === 'N/A' || age === 'PICK' || age === 'NEW') return 0.72;
+  const peak = { nfl:26, mlb:27, nba:26 }[sport] || 26;
+  const diff = Math.abs(age - peak);
+  if (diff <= 2)  return 1.0;
+  if (diff <= 4)  return 0.90;
+  if (diff <= 6)  return 0.78;
+  if (diff <= 9)  return 0.60;
+  return 0.38;
+}
+
+function calcValue(player, sport) {
+  // Check manual override first
+  const name = player.name || `${player.first_name} ${player.last_name}`;
+  if (VALUE_OVERRIDES[name]) return VALUE_OVERRIDES[name];
+
+  const pos  = player.fantasy_positions?.[0] || player.position || player.pos || 'FLEX';
+  const age  = player.age || player.currentAge;
+  const exp  = player.years_exp ?? 3;
+  const scarcity = POS_WEIGHT[pos] || 0.8;
+  const ageMult  = calcAge(age, sport);
+
+  // Base value depends on experience tier
+  let base;
+  if (sport === 'nfl') {
+    base = exp <= 1 ? 5500 : exp <= 3 ? 5000 : exp <= 6 ? 4400 : 3400;
+  } else if (sport === 'mlb') {
+    base = exp <= 1 ? 5200 : exp <= 3 ? 4800 : exp <= 6 ? 4200 : 3200;
+  } else {
+    base = exp <= 1 ? 5400 : exp <= 3 ? 5000 : exp <= 6 ? 4600 : 3400;
+  }
+
+  return Math.max(Math.round(base * scarcity * ageMult), 200);
+}
+
+
+// ================================================================
+// === PLAYER DATABASE ===
+// Pulls from three APIs. Falls back to offline stars if APIs fail.
+// ================================================================
+
+// Each sport gets its own array so tabs stay isolated
+const DB = { nfl: [], mlb: [], nba: [] };
+
+// Offline seed — shown instantly while APIs load
+const OFFLINE_SEEDS = [
+  { id:'s-1',  name:'Patrick Mahomes',  pos:'QB', team:'KC',  sport:'nfl', age:29, years_exp:7 },
+  { id:'s-2',  name:'Josh Allen',       pos:'QB', team:'BUF', sport:'nfl', age:28, years_exp:6 },
+  { id:'s-3',  name:'Justin Jefferson', pos:'WR', team:'MIN', sport:'nfl', age:25, years_exp:4 },
+  { id:'s-4',  name:'CeeDee Lamb',      pos:'WR', team:'DAL', sport:'nfl', age:25, years_exp:4 },
+  { id:'s-5',  name:"Ja'Marr Chase",   pos:'WR', team:'CIN', sport:'nfl', age:24, years_exp:3 },
+  { id:'s-6',  name:'Bijan Robinson',  pos:'RB', team:'ATL', sport:'nfl', age:23, years_exp:2 },
+  { id:'s-7',  name:'Caleb Williams',  pos:'QB', team:'CHI', sport:'nfl', age:23, years_exp:1 },
+  { id:'s-8',  name:'Shohei Ohtani',   pos:'DH', team:'LAD', sport:'mlb', age:30, years_exp:7 },
+  { id:'s-9',  name:'Bobby Witt Jr.',  pos:'SS', team:'KC',  sport:'mlb', age:24, years_exp:3 },
+  { id:'s-10', name:'Aaron Judge',     pos:'OF', team:'NYY', sport:'mlb', age:32, years_exp:8 },
+  { id:'s-11', name:'Paul Skenes',     pos:'SP', team:'PIT', sport:'mlb', age:22, years_exp:1 },
+  { id:'s-12', name:'Walker Jenkins', pos:'OF', team:'MIN', sport:'mlb', age:19, years_exp:0 },
+  { id:'s-13', name:'Max Clark',      pos:'OF', team:'DET', sport:'mlb', age:19, years_exp:0 },
+  { id:'s-14', name:'Victor Wembanyama', pos:'C', team:'SAS', sport:'nba', age:21, years_exp:1 },
+  { id:'s-15', name:'Luka Doncic',    pos:'PG', team:'DAL', sport:'nba', age:25, years_exp:6 },
+  { id:'s-16', name:'Nikola Jokic',   pos:'C',  team:'DEN', sport:'nba', age:29, years_exp:9 },
+  { id:'s-17', name:'Anthony Edwards',pos:'SG', team:'MIN', sport:'nba', age:23, years_exp:4 },
+  { id:'s-18', name:'Jaylen Brown',   pos:'SF', team:'BOS', sport:'nba', age:28, years_exp:8 },
+  { id:'s-19', name:'Zion Williamson',pos:'PF', team:'NOP', sport:'nba', age:24, years_exp:5 },
+  { id:'s-20', name:'Ace Bailey',     pos:'SF', team:'NOP', sport:'nba', age:19, years_exp:0 },
+];
+
+function seedOffline() {
+  OFFLINE_SEEDS.forEach(p => {
+    const v = calcValue(p, p.sport);
+    const entry = { ...p, value: v, displayName: p.name };
+    DB[p.sport].push(entry);
+  });
+  updateCounts();
+}
+
+// ---- NFL via Sleeper API ----
+// Endpoint: https://api.sleeper.app/v1/players/nfl
+// Returns all known NFL players. We filter to active skill positions.
+async function fetchNFL() {
+  try {
+    const res  = await fetch('https://api.sleeper.app/v1/players/nfl');
+    const data = await res.json();
+    const valid = new Set(['QB','RB','WR','TE']);
+    const players = [];
+    for (const id in data) {
+      const p = data[id];
+      if (!p.first_name || !p.last_name) continue;
+      if (p.status === 'Inactive' || p.status === 'Retired') continue;
+      const pos = p.fantasy_positions?.[0] || p.position;
+      if (!valid.has(pos)) continue;
+      const name = `${p.first_name} ${p.last_name}`;
+      players.push({
+        id: p.player_id || id,
+        name, displayName: name,
+        pos, team: p.team || 'FA',
+        sport: 'nfl', age: p.age, years_exp: p.years_exp ?? 3,
+        value: calcValue({ ...p, name }, 'nfl'),
+      });
+    }
+    DB.nfl = players.sort((a,b) => b.value - a.value);
+  } catch(e) { console.warn('NFL fetch failed, using seeds', e); }
+}
+
+// ---- MLB via MLB Stats API ----
+// Endpoint: https://statsapi.mlb.com/api/v1/sports/1/players  (MLB)
+//           https://statsapi.mlb.com/api/v1/sports/11/players (AAA)
+//           https://statsapi.mlb.com/api/v1/sports/12/players (AA)
+//           https://statsapi.mlb.com/api/v1/sports/13/players (A+)
+//           https://statsapi.mlb.com/api/v1/sports/14/players (A)
+// sportId 1=MLB, 11=AAA, 12=AA, 13=A+, 14=A — covers full org depth
+async function fetchMLB() {
+  const sportIds = [1, 11, 12, 13, 14]; // MLB + all 4 minor league levels
+  const seen     = new Set();
+  const players  = [];
+
+  await Promise.all(sportIds.map(async (sid) => {
+    try {
+      const res  = await fetch(`https://statsapi.mlb.com/api/v1/sports/${sid}/players?season=2025&gameType=R`);
+      const data = await res.json();
+      (data.people || []).forEach(p => {
+        if (!p.active || seen.has(p.id)) return;
+        seen.add(p.id);
+        const pos  = p.primaryPosition?.abbreviation || 'UTIL';
+        const team = p.currentTeam?.name || p.currentTeam?.abbreviation || 'FA';
+        const name = p.fullName;
+        players.push({
+          id: `mlb-${p.id}`,
+          name, displayName: name,
+          pos, team,
+          sport: 'mlb',
+          age: p.currentAge,
+          years_exp: p.mlbDebutDate ? new Date().getFullYear() - parseInt(p.mlbDebutDate) : 0,
+          level: sid === 1 ? 'MLB' : sid === 11 ? 'AAA' : sid === 12 ? 'AA' : sid === 13 ? 'A+' : 'A',
+          value: calcValue({ name, pos, age: p.currentAge, years_exp: 2 }, 'mlb'),
+        });
+      });
+    } catch(e) { console.warn(`MLB sportId ${sid} failed`, e); }
+  }));
+
+  DB.mlb = players.sort((a,b) => b.value - a.value);
+}
+
+// ---- NBA via Sleeper API ----
+// Endpoint: https://api.sleeper.app/v1/players/nba
+async function fetchNBA() {
+  try {
+    const res  = await fetch('https://api.sleeper.app/v1/players/nba');
+    const data = await res.json();
+    const valid = new Set(['PG','SG','SF','PF','C','G','F']);
+    const players = [];
+    for (const id in data) {
+      const p = data[id];
+      if (!p.first_name || !p.last_name) continue;
+      if (p.status === 'Inactive' || p.status === 'Retired') continue;
+      const pos = p.fantasy_positions?.[0] || p.position;
+      if (!pos || !valid.has(pos)) continue;
+      const name = `${p.first_name} ${p.last_name}`;
+      players.push({
+        id: p.player_id || id,
+        name, displayName: name,
+        pos, team: p.team || 'FA',
+        sport: 'nba', age: p.age, years_exp: p.years_exp ?? 3,
+        value: calcValue({ ...p, name }, 'nba'),
+      });
+    }
+    DB.nba = players.sort((a,b) => b.value - a.value);
+  } catch(e) { console.warn('NBA fetch failed, using seeds', e); }
+}
+
+// Inject picks into each sport's DB
+function injectPicks() {
+  const allPicks = buildPicks();
+  allPicks.forEach(pk => {
+    if (!DB[pk.sport].find(x => x.id === pk.id)) {
+      DB[pk.sport].push(pk);
+    }
+  });
+}
+
+function updateCounts() {
+  const total = DB.nfl.length + DB.mlb.length + DB.nba.length;
+  document.getElementById('cnt-multi').textContent = total || '—';
+  document.getElementById('cnt-nfl').textContent   = DB.nfl.length || '—';
+  document.getElementById('cnt-mlb').textContent   = DB.mlb.length || '—';
+  document.getElementById('cnt-nba').textContent   = DB.nba.length || '—';
+}
+
+async function syncRosters() {
+  setStatus('loading', 'Syncing rosters…');
+  await Promise.all([fetchNFL(), fetchMLB(), fetchNBA()]);
+  injectPicks();
+  updateCounts();
+  setStatus('live', `${(DB.nfl.length + DB.mlb.length + DB.nba.length).toLocaleString()} players loaded`);
+  toast('Rosters synced!', 'ok');
+}
+
+function setStatus(state, msg) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  dot.className = 'status-dot ' + (state === 'live' ? '' : state);
+  txt.textContent = msg;
+}
+
+
+// ================================================================
+// === TRADE STATE ===
+// Each sport keeps its own A/B trade lists so switching tabs
+// doesn't wipe your in-progress trades.
+// ================================================================
+const TRADE = {
+  multi: { a: [], b: [] },
+  nfl:   { a: [], b: [] },
+  mlb:   { a: [], b: [] },
+  nba:   { a: [], b: [] },
+};
+
+// Saved trades stored in browser localStorage (persists across sessions)
+const SAVED = JSON.parse(localStorage.getItem('omnitrade_v2') || '{}');
+['multi','nfl','mlb','nba'].forEach(s => { if (!SAVED[s]) SAVED[s] = []; });
+
+function persistSaved() {
+  localStorage.setItem('omnitrade_v2', JSON.stringify(SAVED));
+}
+
+
+// ================================================================
+// === TAB NAVIGATION ===
+// ================================================================
+let currentTab = 'multi';
+
+function setTab(sport) {
+  currentTab = sport;
+  document.querySelectorAll('.sport-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.sport-tab[data-sport="${sport}"]`).classList.add('active');
+  document.querySelectorAll('.sport-page').forEach(p => p.classList.remove('active'));
+  document.getElementById(`page-${sport}`).classList.add('active');
+}
+
+
+// ================================================================
+// === SEARCH & DROPDOWN ===
+// ================================================================
+const DD_TIMERS = {};
+
+// Get the player pool for a given sport tab
+function getPool(sport) {
+  if (sport === 'multi') return [...DB.nfl, ...DB.mlb, ...DB.nba];
+  return DB[sport] || [];
+}
+
+function doSearch(sport, side) {
+  clearTimeout(DD_TIMERS[`${sport}-${side}`]);
+  DD_TIMERS[`${sport}-${side}`] = setTimeout(() => renderDD(sport, side), 100);
+}
+
+function openDD(sport, side) {
+  setTimeout(() => renderDD(sport, side), 60);
+}
+
+function delayClose(sport, side) {
+  clearTimeout(DD_TIMERS[`${sport}-${side}`]);
+  DD_TIMERS[`${sport}-${side}`] = setTimeout(() => {
+    const el = document.getElementById(`dd-${sport}-${side}`);
+    if (el) el.classList.remove('open');
+  }, 200);
+}
+
+function renderDD(sport, side) {
+  const query = document.getElementById(`srch-${sport}-${side}`).value.trim().toLowerCase();
+  const ddEl  = document.getElementById(`dd-${sport}-${side}`);
+  const used  = [...(TRADE[sport].a), ...(TRADE[sport].b)].map(p => p.id);
+  const pool  = getPool(sport).filter(p => !used.includes(p.id));
+
+  if (!query) {
+    // Show top players by value when search is empty
+    const top = pool.filter(p => p.age !== 'PICK').slice(0, 8);
+    if (!top.length) { ddEl.classList.remove('open'); return; }
+    ddEl.innerHTML = `<div class="dd-section-label">Top Players</div>` + top.map(p => ddItemHTML(p)).join('');
+    ddEl.classList.add('open');
+    return;
+  }
+
+  const words   = query.split(/\s+/);
+  const matched = pool.filter(p => {
+    const n = p.displayName.toLowerCase();
+    return words.every(w => n.includes(w));
+  });
+
+  if (!matched.length) {
+    ddEl.innerHTML = `<div class="dd-no-results">No results for "${query}"</div>`;
+    ddEl.classList.add('open');
+    return;
+  }
+
+  // Group into Players and Picks
+  const players = matched.filter(p => p.age !== 'PICK').slice(0, 8);
+  const picks   = matched.filter(p => p.age === 'PICK').slice(0, 6);
+  let html = '';
+
+  if (players.length) {
+    html += `<div class="dd-section-label">Players</div>` + players.map(p => ddItemHTML(p)).join('');
+  }
+  if (picks.length) {
+    html += `<div class="dd-section-label">Draft Picks</div>` + picks.map(p => ddItemHTML(p)).join('');
+  }
+
+  ddEl.innerHTML = html;
+  ddEl.classList.add('open');
+}
+
+function ddItemHTML(p) {
+  const chipSport = p.age === 'PICK' ? 'pick' : p.sport;
+  const chipLabel = p.age === 'PICK' ? 'PICK' : p.sport.toUpperCase();
+  const levelTag  = p.level && p.level !== 'MLB' ? ` · <span style="color:var(--gold);font-size:9px">${p.level}</span>` : '';
+  return `
+    <div class="dd-item" onmousedown="addPlayer('${p.id}')">
+      <div class="dd-item-left">
+        <div class="dd-item-name">${p.displayName}</div>
+        <div class="dd-item-meta">
+          <span class="chip chip-${chipSport}">${chipLabel}</span>
+          ${p.pos}${p.team ? ' · ' + p.team : ''}${levelTag}
+          ${p.age && p.age !== 'PICK' && p.age !== 'N/A' ? ' · Age ' + p.age : ''}
+        </div>
+      </div>
+      <div class="dd-item-val">${(p.value || 0).toLocaleString()}</div>
+    </div>`;
+}
+
+function addPlayer(id) {
+  // Find which tab/side we're currently adding to
+  const sport = currentTab;
+  if (sport === 'add') return;
+
+  const pool = getPool(sport);
+  const player = pool.find(p => p.id === id);
+  if (!player) return;
+
+  // Figure out which side the user last interacted with
+  // (We track lastActiveSide per sport)
+  const side = lastSide[sport] || 'a';
+  TRADE[sport][side].push(player);
+
+  // Close dropdown + clear input
+  ['a','b'].forEach(s => {
+    const dd = document.getElementById(`dd-${sport}-${s}`);
+    if (dd) { dd.classList.remove('open'); dd.innerHTML = ''; }
+    const inp = document.getElementById(`srch-${sport}-${s}`);
+    if (inp && document.activeElement === inp) inp.value = '';
+  });
+
+  renderList(sport, side);
+  updateTotals(sport);
+  hideVerdict(sport);
+}
+
+// Track which side (a or b) was last focused so addPlayer knows where to put the player
+const lastSide = { multi:'a', nfl:'a', mlb:'a', nba:'a' };
+['multi','nfl','mlb','nba'].forEach(sport => {
+  ['a','b'].forEach(side => {
+    const inp = document.getElementById(`srch-${sport}-${side}`);
+    if (inp) inp.addEventListener('focus', () => { lastSide[sport] = side; });
+  });
+});
+
+
+// ================================================================
+// === RENDER TRADE LISTS ===
+// ================================================================
+function renderList(sport, side) {
+  const list = TRADE[sport][side];
+  const el   = document.getElementById(`list-${sport}-${side}`);
+  if (!el) return;
+
+  if (!list.length) {
+    const msgs = {
+      multi: 'Search players from any sport',
+      nfl: 'Search NFL players & picks',
+      mlb: 'Search MLB & MiLB players',
+      nba: 'Search NBA players & picks',
+    };
+    el.innerHTML = `<div class="empty-msg">${msgs[sport]}</div>`;
+    return;
+  }
+
+  el.innerHTML = list.map(p => {
+    const chipSport = p.age === 'PICK' ? 'pick' : p.sport;
+    const chipLabel = p.age === 'PICK' ? 'PICK' : p.sport.toUpperCase();
+    const cardSport = p.age === 'PICK' ? 'pick' : p.sport;
+    const levelTag  = p.level && p.level !== 'MLB' ? ` · <span style="color:var(--gold)">${p.level}</span>` : '';
+    return `
+      <div class="player-card" data-sport="${cardSport}">
+        <div class="pc-info">
+          <div class="pc-name">${p.displayName}</div>
+          <div class="pc-meta">
+            <span class="chip chip-${chipSport}">${chipLabel}</span>
+            ${p.pos}${p.team ? ' · ' + p.team : ''}${levelTag}
+            ${p.age && p.age !== 'PICK' && p.age !== 'N/A' ? ' · Age ' + p.age : ''}
+          </div>
+        </div>
+        <div class="pc-val">${(p.value || 0).toLocaleString()}</div>
+        <button class="pc-remove" onclick="removePlayer('${sport}','${side}','${p.id}')">✕</button>
+      </div>`;
+  }).join('');
+}
+
+function removePlayer(sport, side, id) {
+  TRADE[sport][side] = TRADE[sport][side].filter(p => p.id !== id);
+  renderList(sport, side);
+  updateTotals(sport);
+  hideVerdict(sport);
+}
+
+function clearTrade(sport) {
+  TRADE[sport].a = []; TRADE[sport].b = [];
+  renderList(sport, 'a'); renderList(sport, 'b');
+  updateTotals(sport);
+  hideVerdict(sport);
+}
+
+function updateTotals(sport) {
+  const ta = TRADE[sport].a.reduce((s,p) => s + (p.value || 0), 0);
+  const tb = TRADE[sport].b.reduce((s,p) => s + (p.value || 0), 0);
+  const elA = document.getElementById(`total-${sport}-a`);
+  const elB = document.getElementById(`total-${sport}-b`);
+  if (elA) elA.textContent = ta.toLocaleString();
+  if (elB) elB.textContent = tb.toLocaleString();
+}
+
+
+// ================================================================
+// === ANALYZE TRADE ===
+// ================================================================
+function analyze(sport) {
+  const a = TRADE[sport].a;
+  const b = TRADE[sport].b;
+
+  if (!a.length && !b.length) {
+    toast('Add players to both sides first', 'err');
+    return;
+  }
+
+  const ta = a.reduce((s,p) => s + (p.value || 0), 0);
+  const tb = b.reduce((s,p) => s + (p.value || 0), 0);
+
+  const diff    = Math.abs(ta - tb);
+  const bigger  = Math.max(ta, tb, 1);
+  const pct     = diff / bigger * 100;
+  const aWins   = ta >= tb;
+  const barPct  = ta + tb > 0 ? (ta / (ta + tb) * 100) : 50;
+
+  let headline, headColor;
+  if (pct < 5)       { headline = '⚖️  FAIR TRADE';              headColor = 'var(--win)'; }
+  else if (pct < 13) { headline = aWins ? '✅  TEAM A WINS' : '✅  TEAM B WINS'; headColor = 'var(--multi)'; }
+  else if (pct < 25) { headline = aWins ? '🔥  TEAM A ADVANTAGE' : '🔥  TEAM B ADVANTAGE'; headColor = 'var(--nba)'; }
+  else               { headline = aWins ? '🏆  TEAM A DOMINATES' : '🏆  TEAM B DOMINATES'; headColor = 'var(--gold)'; }
+
+  const allRows = [
+    ...a.map(p => ({ ...p, side:'A' })),
+    ...b.map(p => ({ ...p, side:'B' })),
+  ].sort((x,y) => y.value - x.value);
+
+  const panel = document.getElementById(`verdict-${sport}`);
+  panel.innerHTML = `
+    <div class="verdict-top">
+      <div>
+        <div class="verdict-label">Trade Analysis · ${sport.toUpperCase()}</div>
+        <div class="verdict-headline" style="color:${headColor}">${headline}</div>
+      </div>
+      <div class="verdict-actions">
+        <button class="action-btn" id="copy-text-${sport}" onclick="copyText('${sport}')">📋 Copy Summary</button>
+        <button class="action-btn" id="copy-link-${sport}" onclick="copyLink('${sport}')">🔗 Copy Link</button>
+      </div>
+    </div>
+    <div class="verdict-scores">
+      <div class="verdict-score-block">
+        <div class="vsb-label">Team A Receives</div>
+        <div class="vsb-value" style="color:var(--multi)">${ta.toLocaleString()}</div>
+        <div class="vsb-diff" style="color:${aWins ? 'var(--win)' : 'var(--lose)'}">
+          ${aWins ? '▲ +' + (ta-tb).toLocaleString() + ' edge' : '▼ –' + (tb-ta).toLocaleString()}
+        </div>
+      </div>
+      <div class="verdict-score-block">
+        <div class="vsb-label">Team B Receives</div>
+        <div class="vsb-value" style="color:var(--gold)">${tb.toLocaleString()}</div>
+        <div class="vsb-diff" style="color:${!aWins ? 'var(--win)' : 'var(--lose)'}">
+          ${!aWins ? '▲ +' + (tb-ta).toLocaleString() + ' edge' : '▼ –' + (ta-tb).toLocaleString()}
+        </div>
+      </div>
+    </div>
+    <div class="verdict-bar-wrap">
+      <div class="verdict-bar-labels">
+        <span>Team A  ${Math.round(barPct)}%</span>
+        <span style="color:var(--text3)">${pct.toFixed(1)}% gap</span>
+        <span>${Math.round(100-barPct)}%  Team B</span>
+      </div>
+      <div class="verdict-bar-track">
+        <div class="verdict-bar-fill" style="width:${barPct}%"></div>
+      </div>
+    </div>
+    <div class="verdict-breakdown">
+      <div class="breakdown-header">All Assets Breakdown</div>
+      ${allRows.map(p => {
+        const chipSport = p.age === 'PICK' ? 'pick' : p.sport;
+        return `
+          <div class="breakdown-row">
+            <span class="br-name">${p.displayName}</span>
+            <span class="chip chip-${chipSport}" style="font-size:9px">${p.age === 'PICK' ? 'PICK' : p.sport.toUpperCase()}</span>
+            <span class="br-side br-side-${p.side.toLowerCase()}">TM ${p.side}</span>
+            <span class="br-val">${(p.value||0).toLocaleString()}</span>
+          </div>`;
+      }).join('')}
+    </div>`;
+
+  panel.classList.add('visible');
+  setTimeout(() => panel.scrollIntoView({ behavior:'smooth', block:'nearest' }), 50);
+}
+
+function hideVerdict(sport) {
+  const p = document.getElementById(`verdict-${sport}`);
+  if (p) p.classList.remove('visible');
+}
+
+
+// ================================================================
+// === SHARE / COPY ===
+// ================================================================
+function buildTradeText(sport) {
+  const a  = TRADE[sport].a;
+  const b  = TRADE[sport].b;
+  const ta = a.reduce((s,p)=>s+(p.value||0),0);
+  const tb = b.reduce((s,p)=>s+(p.value||0),0);
+  const who = ta > tb ? 'Team A wins' : tb > ta ? 'Team B wins' : 'Fair trade';
+  let t = `🏆 OmniTrade — ${sport.toUpperCase()} Analysis\n`;
+  t += `${'─'.repeat(32)}\n`;
+  t += `TEAM A RECEIVES  (${ta.toLocaleString()} pts)\n`;
+  a.forEach(p => t += `  • ${p.displayName} [${p.sport?.toUpperCase()}] — ${p.value?.toLocaleString()}\n`);
+  t += `\nTEAM B RECEIVES  (${tb.toLocaleString()} pts)\n`;
+  b.forEach(p => t += `  • ${p.displayName} [${p.sport?.toUpperCase()}] — ${p.value?.toLocaleString()}\n`);
+  t += `${'─'.repeat(32)}\n`;
+  t += `Verdict: ${who}\nomnitrade.gg`;
+  return t;
+}
+
+function copyText(sport) {
+  navigator.clipboard.writeText(buildTradeText(sport)).then(() => {
+    const btn = document.getElementById(`copy-text-${sport}`);
+    if (btn) { btn.textContent = '✅ Copied!'; btn.classList.add('copied'); }
+    toast('Trade summary copied!', 'ok');
+    setTimeout(() => { if (btn) { btn.textContent = '📋 Copy Summary'; btn.classList.remove('copied'); } }, 2500);
+  });
+}
+
+function copyLink(sport) {
+  const a = TRADE[sport].a.map(p => p.id).join(',');
+  const b = TRADE[sport].b.map(p => p.id).join(',');
+  const url = `${location.href.split('?')[0]}?sport=${sport}&a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`;
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.getElementById(`copy-link-${sport}`);
+    if (btn) { btn.textContent = '✅ Copied!'; btn.classList.add('copied'); }
+    toast('Link copied!', 'ok');
+    setTimeout(() => { if (btn) { btn.textContent = '🔗 Copy Link'; btn.classList.remove('copied'); } }, 2500);
+  });
+}
+
+
+// ================================================================
+// === SAVE / LOAD TRADES ===
+// ================================================================
+let saveTargetSport = 'multi';
+
+function openSave(sport) {
+  if (!TRADE[sport].a.length && !TRADE[sport].b.length) {
+    toast('Build a trade first!', 'err'); return;
+  }
+  saveTargetSport = sport;
+  document.getElementById('save-name-input').value = '';
+  document.getElementById('save-modal').classList.add('open');
+  setTimeout(() => document.getElementById('save-name-input').focus(), 80);
+}
+
+function closeModal() {
+  document.getElementById('save-modal').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function confirmSave() {
+  const sport = saveTargetSport;
+  const name  = document.getElementById('save-name-input').value.trim() || `Trade ${new Date().toLocaleDateString()}`;
+  const ta    = TRADE[sport].a.reduce((s,p)=>s+(p.value||0),0);
+  const tb    = TRADE[sport].b.reduce((s,p)=>s+(p.value||0),0);
+  const entry = {
+    id: Date.now(), name,
+    date: new Date().toLocaleDateString(),
+    a: TRADE[sport].a.map(p => ({ id:p.id, displayName:p.displayName, sport:p.sport, pos:p.pos, team:p.team, age:p.age, value:p.value })),
+    b: TRADE[sport].b.map(p => ({ id:p.id, displayName:p.displayName, sport:p.sport, pos:p.pos, team:p.team, age:p.age, value:p.value })),
+    ta, tb,
+  };
+  SAVED[sport].unshift(entry);
+  if (SAVED[sport].length > 25) SAVED[sport].pop();
+  persistSaved();
+  closeModal();
+  renderSaved(sport);
+  toast(`"${name}" saved!`, 'ok');
+}
+
+function loadTrade(sport, id) {
+  const entry = SAVED[sport].find(t => t.id === id);
+  if (!entry) return;
+  TRADE[sport].a = entry.a;
+  TRADE[sport].b = entry.b;
+  renderList(sport, 'a'); renderList(sport, 'b');
+  updateTotals(sport);
+  setTab(sport);
+  analyze(sport);
+  toast(`Loaded: ${entry.name}`, 'ok');
+}
+
+function deleteTrade(sport, id) {
+  SAVED[sport] = SAVED[sport].filter(t => t.id !== id);
+  persistSaved();
+  renderSaved(sport);
+}
+
+function renderSaved(sport) {
+  const list  = document.getElementById(`saved-${sport}-list`);
+  const count = document.getElementById(`saved-${sport}-count`);
+  if (!list) return;
+  const trades = SAVED[sport] || [];
+  if (count) count.textContent = `${trades.length} saved`;
+  if (!trades.length) {
+    list.innerHTML = `<div class="saved-empty">No saved trades yet.</div>`;
+    return;
+  }
+  list.innerHTML = trades.map(t => `
+    <div class="saved-item">
+      <div class="si-info">
+        <div class="si-name">${t.name}</div>
+        <div class="si-meta">${t.date} · A: ${t.ta?.toLocaleString()} vs B: ${t.tb?.toLocaleString()} · ${(t.a?.length||0)+(t.b?.length||0)} assets</div>
+      </div>
+      <div class="si-actions">
+        <button class="mini-btn" onclick="loadTrade('${sport}',${t.id})">Load</button>
+        <button class="mini-btn" onclick="copySavedLink('${sport}',${t.id})">🔗</button>
+        <button class="mini-btn del" onclick="deleteTrade('${sport}',${t.id})">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function copySavedLink(sport, id) {
+  const entry = SAVED[sport].find(t => t.id === id);
+  if (!entry) return;
+  const a = entry.a.map(p => p.id).join(',');
+  const b = entry.b.map(p => p.id).join(',');
+  const url = `${location.href.split('?')[0]}?sport=${sport}&a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`;
+  navigator.clipboard.writeText(url).then(() => toast('Link copied!', 'ok'));
+}
+
+
+// ================================================================
+// === TOAST NOTIFICATIONS ===
+// ================================================================
+let toastTimer;
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className   = `toast show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+
+// ================================================================
+// === BOOT SEQUENCE ===
+// Runs when the page first loads.
+// ================================================================
+window.addEventListener('DOMContentLoaded', async () => {
+  // 1. Show offline seeds immediately so the page is usable right away
+  seedOffline();
+
+  // 2. Render all saved trade lists from localStorage
+  ['multi','nfl','mlb','nba'].forEach(s => renderSaved(s));
+
+  // 3. Fetch live data from all APIs in the background
+  setStatus('loading', 'Fetching live rosters…');
+  await Promise.all([fetchNFL(), fetchMLB(), fetchNBA()]);
+  injectPicks();
+  updateCounts();
+
+  const total = DB.nfl.length + DB.mlb.length + DB.nba.length;
+  setStatus('live', `${total.toLocaleString()} players loaded`);
+});
+</script>
+</body>
+</html>
